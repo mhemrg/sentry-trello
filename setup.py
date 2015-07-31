@@ -28,8 +28,6 @@ along with Sentry-Trello.  If not, see <http://www.gnu.org/licenses/>.
 from setuptools import setup, find_packages
 
 install_requires = [
-    'sentry>=5.0.0',
-    'trello',
 ]
 
 setup(
