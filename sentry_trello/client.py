@@ -68,7 +68,8 @@ class TrelloClient(object):
         )
 
     def organizations_to_options(self, member_id_or_username='me'):
-        organizations = self.get_organization_list(member_id_or_username, fields='name')
+        organizations = self.get_organization_list(
+            member_id_or_username, fields='name')
         options = tuple()
         for org in organizations:
             options += ((org['id'], org['name']),)
