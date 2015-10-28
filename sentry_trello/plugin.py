@@ -30,6 +30,7 @@ import sentry_trello
 from django import forms
 from django.utils.translation import ugettext_lazy as _
 from requests.exceptions import RequestException
+from sentry.plugins.base import JSONResponse
 from sentry.plugins.bases.issue import IssuePlugin, NewIssueForm
 from sentry.utils.http import absolute_uri
 
@@ -38,6 +39,8 @@ from .client import TrelloClient
 SETUP_URL = 'https://github.com/damianzaremba/sentry-trello/blob/master/HOW_TO_SETUP.md'  # NOQA
 
 ISSUES_URL = 'https://github.com/damianzaremba/sentry-trello/issues'
+
+EMPTY = (('', ''),)
 
 
 class TrelloSettingsForm(forms.Form):
@@ -55,7 +58,7 @@ class TrelloSettingsForm(forms.Form):
         if initial.get('key'):
             trello = TrelloClient(initial.get('key'), initial.get('token'))
             try:
-                organizations = (('', ''),) + trello.organizations_to_options()
+                organizations = EMPTY + trello.organizations_to_options()
             except RequestException:
                 disabled = True
             else:
@@ -84,12 +87,17 @@ class TrelloForm(NewIssueForm):
     description = forms.CharField(
         label=_('Description'),
         widget=forms.Textarea(attrs={'class': 'span9'}))
-    board_list = forms.CharField(label=_('Trello List'), max_length=50)
+    trello_board = forms.CharField(label=_('Board'), max_length=50)
+    trello_list = forms.CharField(label=_('List'), max_length=50)
 
     def __init__(self, data=None, initial=None):
         super(TrelloForm, self).__init__(data=data, initial=initial)
-        self.fields['board_list'].widget = forms.Select(
-            choices=initial.get('trello_list', ())
+        self.fields['trello_board'].widget = forms.Select(
+            choices=EMPTY + initial.get('boards', ())
+        )
+        self.fields['trello_list'].widget = forms.Select(
+            attrs={'disabled': True},
+            choices=initial.get('list', ()),
         )
 
 
@@ -113,8 +121,8 @@ class TrelloCard(IssuePlugin):
 
     version = sentry_trello.VERSION
     project_conf_form = TrelloSettingsForm
-
     new_issue_form = TrelloForm
+    create_issue_template = 'sentry_trello/create_trello_issue.html'
 
     def _get_group_description(self, request, group, event):
         """
@@ -145,6 +153,21 @@ class TrelloCard(IssuePlugin):
             token=self.get_option('token', project),
         )
 
+    def view(self, request, group, **kwargs):
+        if request.is_ajax():
+            view = self.view_ajax
+        else:
+            view = super(TrelloCard, self).view
+        return view(request, group, **kwargs)
+
+    def view_ajax(self, request, group, **kwargs):
+        if request.GET.get('action', '') != 'lists':
+            return JSONResponse({})
+        board_id = request.GET['board_id']
+        trello = self.get_client(group.project)
+        lists = trello.get_board_list(board_id, fields='name')
+        return JSONResponse({'result': lists})
+
     def get_initial_form_data(self, request, group, event, **kwargs):
         initial = super(TrelloCard, self).get_initial_form_data(
             request, group, event, **kwargs)
@@ -160,8 +183,7 @@ class TrelloCard(IssuePlugin):
                 _('Error adding Trello card: %s') % str(e))
 
         initial.update({
-            'board_list': self.get_option('board_list', group.project),
-            'trello_list': boards
+            'boards': boards,
         })
         return initial
 
@@ -182,7 +204,7 @@ class TrelloCard(IssuePlugin):
             card = trello.new_card(
                 name=form_data['title'],
                 desc=form_data['description'],
-                idList=form_data['board_list'],
+                idList=form_data['trello_list'],
             )
         except RequestException as e:
             raise forms.ValidationError(

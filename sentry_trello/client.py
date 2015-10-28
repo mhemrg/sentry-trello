@@ -90,9 +90,5 @@ class TrelloClient(object):
             boards = self.get_boards(fields='name')
         options = tuple()
         for board in boards:
-            group = tuple()
-            lists = self.get_board_list(board['id'], fields='name')
-            for l in lists:
-                group += ((l['id'], l['name']),)
-            options += ((board['name'], group),)
+            options += ((board['id'], board['name']),)
         return options

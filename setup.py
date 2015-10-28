@@ -42,9 +42,12 @@ setup(
     packages=find_packages(exclude=['tests']),
     install_requires=install_requires,
     entry_points={
+        'sentry.apps': [
+            'sentry_trello = sentry_trello',
+        ],
         'sentry.plugins': [
-            'trello = sentry_trello.plugin:TrelloCard'
-        ]
+            'trello = sentry_trello.plugin:TrelloCard',
+        ],
     },
     include_package_data=True,
 )
