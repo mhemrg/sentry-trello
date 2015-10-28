@@ -14,7 +14,7 @@ class TrelloClient(object):
 
     def _request(self, path, method="GET", params=None, data=None):
         path = path.lstrip('/')
-        url = '%s/%s' % (self.base_url, path)
+        url = self.base_url + path
 
         if not params:
             params = {}
@@ -32,7 +32,7 @@ class TrelloClient(object):
         resp.raise_for_status()
         return json.loads(resp.content)
 
-    def get_organization_board(self, org_id_or_name, fields=None):
+    def get_organization_boards(self, org_id_or_name, fields=None):
         return self._request(
             path='/organizations/%s/boards' % (org_id_or_name),
             params={
@@ -67,6 +67,14 @@ class TrelloClient(object):
             },
         )
 
+    def get_boards(self, member_id_or_username='me', fields=None):
+        return self._request(
+            path='/members/%s/boards' % member_id_or_username,
+            params={
+                'fields': fields,
+            }
+        )
+
     def organizations_to_options(self, member_id_or_username='me'):
         organizations = self.get_organization_list(
             member_id_or_username, fields='name')
@@ -75,8 +83,11 @@ class TrelloClient(object):
             options += ((org['id'], org['name']),)
         return options
 
-    def boards_to_options(self, organization):
-        boards = self.get_organization_board(organization, fields='name')
+    def boards_to_options(self, organization=None):
+        if organization:
+            boards = self.get_organization_boards(organization, fields='name')
+        else:
+            boards = self.get_boards(fields='name')
         options = tuple()
         for board in boards:
             group = tuple()

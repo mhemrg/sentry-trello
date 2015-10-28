@@ -66,18 +66,15 @@ class TrelloSettingsForm(forms.Form):
         if disabled:
             attrs = {'disabled': 'disabled'}
             help_text = _('Set correct key and token and save before')
-            required = False
         else:
             attrs = None
             help_text = None
-            required = True
 
         self.fields['organization'].widget = forms.Select(
             attrs=attrs,
             choices=organizations,
         )
         self.fields['organization'].help_text = help_text
-        self.fields['organization'].required = required
 
 
 class TrelloForm(NewIssueForm):
@@ -139,7 +136,7 @@ class TrelloCard(IssuePlugin):
     def is_configured(self, request, project, **kwargs):
         return all((
             self.get_option(key, project)
-            for key in ('key', 'token', 'organization')
+            for key in ('key', 'token')
         ))
 
     def get_client(self, project):
@@ -152,10 +149,12 @@ class TrelloCard(IssuePlugin):
         initial = super(TrelloCard, self).get_initial_form_data(
             request, group, event, **kwargs)
         trello = self.get_client(group.project)
+        organization = self.get_option('organization', group.project)
+        options = {}
+        if organization:
+            options['organization'] = organization
         try:
-            boards = trello.boards_to_options(
-                organization=self.get_option('organization', group.project),
-            )
+            boards = trello.boards_to_options(**options)
         except RequestException as e:
             raise forms.ValidationError(
                 _('Error adding Trello card: %s') % str(e))
