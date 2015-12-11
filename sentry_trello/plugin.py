@@ -46,8 +46,13 @@ EMPTY = (('', ''),)
 class TrelloSettingsForm(forms.Form):
     key = forms.CharField(label=_('Trello API Key'))
     token = forms.CharField(label=_('Trello API Token'))
-    organization = forms.CharField(label=_('Organization to add a card to'),
-                                   max_length=50, required=False)
+    organization = forms.CharField(label=_('Trello Organization'),
+                                   max_length=50, required=True)
+
+    error_messages = {
+        'invalid_auth': _('Invalid credentials. Please check your key and token and try again.'),
+        'api_failure': _('An unknown error occurred while fetching data from Trello.'),
+    }
 
     def __init__(self, *args, **kwargs):
         super(TrelloSettingsForm, self).__init__(*args, **kwargs)
@@ -55,8 +60,8 @@ class TrelloSettingsForm(forms.Form):
 
         organizations = ()
 
-        if initial.get('key'):
-            trello = TrelloClient(initial.get('key'), initial.get('token'))
+        if initial.get('key') and initial.get('token'):
+            trello = TrelloClient(initial['key'], initial['token'])
             try:
                 organizations = EMPTY + trello.organizations_to_options()
             except RequestException:
@@ -67,17 +72,22 @@ class TrelloSettingsForm(forms.Form):
             disabled = True
 
         if disabled:
-            attrs = {'disabled': 'disabled'}
-            help_text = _('Set correct key and token and save before')
-        else:
-            attrs = None
-            help_text = None
+            del self.fields['organization']
 
-        self.fields['organization'].widget = forms.Select(
-            attrs=attrs,
-            choices=organizations,
-        )
-        self.fields['organization'].help_text = help_text
+    def clean(self):
+        key = self.cleaned_data.get('key')
+        token = self.cleaned_data.get('token')
+        if key and token:
+            trello = TrelloClient(key, token)
+            try:
+                organizations = (('', ''),) + trello.organizations_to_options()
+            except RequestException as exc:
+                if exc.response.status_code == 401:
+                    msg = self.error_messages['invalid_auth']
+                else:
+                    msg = self.error_messages['api_failure']
+                raise forms.ValidationError(msg)
+        return self.cleaned_data
 
 
 class TrelloForm(NewIssueForm):
@@ -169,6 +179,8 @@ class TrelloCard(IssuePlugin):
         return JSONResponse({'result': lists})
 
     def get_initial_form_data(self, request, group, event, **kwargs):
+        # TODO(dcramer): token is a secret and should be treated like a password
+        # i.e. not returned into responses
         initial = super(TrelloCard, self).get_initial_form_data(
             request, group, event, **kwargs)
         trello = self.get_client(group.project)
