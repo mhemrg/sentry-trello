@@ -1,15 +1,17 @@
 sudo: false
 language: python
+services:
+  - memcached
+  - postgresql
+  - redis-server
 python:
   - "2.7"
 cache:
   directories:
     - node_modules
-    - .pip_download_cache
-env:
-  global:
-    - PIP_DOWNLOAD_CACHE=".pip_download_cache"
+    - $HOME/.cache/pip
 install:
-  - pip install flake8
+  - make develop
 script:
-  - PYFLAKES_NODOCTEST=1 flake8 .
+  - flake8
+  - py.test
