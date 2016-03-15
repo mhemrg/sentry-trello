@@ -28,6 +28,13 @@ along with Sentry-Trello.  If not, see <http://www.gnu.org/licenses/>.
 from setuptools import setup, find_packages
 
 install_requires = [
+    'sentry>=7.0.0',
+]
+
+tests_require = [
+    'exam',
+    'flake8>=2.0,<2.1',
+    'responses',
 ]
 
 setup(
@@ -41,6 +48,9 @@ setup(
     license='GPL',
     packages=find_packages(exclude=['tests']),
     install_requires=install_requires,
+    extras_require={
+        'tests': tests_require,
+    },
     entry_points={
         'sentry.apps': [
             'sentry_trello = sentry_trello',

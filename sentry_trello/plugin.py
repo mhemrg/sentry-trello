@@ -43,11 +43,29 @@ ISSUES_URL = 'https://github.com/damianzaremba/sentry-trello/issues'
 EMPTY = (('', ''),)
 
 
+class TrelloError(Exception):
+    status_code = None
+
+    def __init__(self, response_text, status_code=None):
+        if status_code is not None:
+            self.status_code = status_code
+        self.text = response_text
+        super(TrelloError, self).__init__(response_text[:128])
+
+    @classmethod
+    def from_response(cls, response):
+        return cls(response.text, response.status_code)
+
+
+class TrelloUnauthorized(TrelloError):
+    status_code = 401
+
+
 class TrelloSettingsForm(forms.Form):
     key = forms.CharField(label=_('Trello API Key'))
     token = forms.CharField(label=_('Trello API Token'))
-    organization = forms.CharField(label=_('Trello Organization'),
-                                   max_length=50, required=True)
+    organization = forms.ChoiceField(
+        label=_('Trello Organization'), choices=(), required=True)
 
     error_messages = {
         'invalid_auth': _('Invalid credentials. Please check your key and token and try again.'),
@@ -64,14 +82,11 @@ class TrelloSettingsForm(forms.Form):
             trello = TrelloClient(initial['key'], initial['token'])
             try:
                 organizations = EMPTY + trello.organizations_to_options()
+                self.fields['organization'].choices = organizations
+                self.fields['organization'].widget.choices = self.fields['organization'].choices
             except RequestException:
-                disabled = True
-            else:
-                disabled = False
+                del self.fields['organization']
         else:
-            disabled = True
-
-        if disabled:
             del self.fields['organization']
 
     def clean(self):
@@ -80,9 +95,10 @@ class TrelloSettingsForm(forms.Form):
         if key and token:
             trello = TrelloClient(key, token)
             try:
-                organizations = (('', ''),) + trello.organizations_to_options()
+                # simply key validation
+                trello.organizations_to_options()
             except RequestException as exc:
-                if exc.response.status_code == 401:
+                if exc.response and exc.response.status_code == 401:
                     msg = self.error_messages['invalid_auth']
                 else:
                     msg = self.error_messages['api_failure']
@@ -133,6 +149,7 @@ class TrelloCard(IssuePlugin):
     project_conf_form = TrelloSettingsForm
     new_issue_form = TrelloForm
     create_issue_template = 'sentry_trello/create_trello_issue.html'
+    plugin_misconfigured_template = 'sentry_trello/plugin_misconfigured.html'
 
     def _get_group_description(self, request, group, event):
         """
@@ -168,7 +185,15 @@ class TrelloCard(IssuePlugin):
             view = self.view_ajax
         else:
             view = super(TrelloCard, self).view
-        return view(request, group, **kwargs)
+        try:
+            return view(request, group, **kwargs)
+        except TrelloError as e:
+            if request.is_ajax():
+                return JSONResponse({})
+            return self.render(self.plugin_misconfigured_template, {
+                'text': e.text,
+                'title': self.get_new_issue_title(),
+            })
 
     def view_ajax(self, request, group, **kwargs):
         if request.GET.get('action', '') != 'lists':
@@ -191,8 +216,13 @@ class TrelloCard(IssuePlugin):
         try:
             boards = trello.boards_to_options(**options)
         except RequestException as e:
-            raise forms.ValidationError(
-                _('Error adding Trello card: %s') % str(e))
+            print(e.request.url)
+            resp = e.response
+            if not resp:
+                raise TrelloError('Internal Error')
+            if resp.status_code == 401:
+                raise TrelloUnauthorized.from_response(resp)
+            raise TrelloError.from_response(resp)
 
         initial.update({
             'boards': boards,
