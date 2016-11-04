@@ -12,6 +12,10 @@
                     url: '?action=lists&board_id=' + evt.val,
                     success: function(data) {
                         var result = data.result;
+                        if (!result.length) {
+                            $lists.prop('disabled', false);
+                            return;
+                        }
                         var options = [];
                         for (var i=0; i<result.length; i++) {
                             options.push(
