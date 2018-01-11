@@ -40,7 +40,7 @@ SETUP_URL = 'https://github.com/getsentry/sentry-trello/blob/master/HOW_TO_SETUP
 
 ISSUES_URL = 'https://github.com/getsentry/sentry-trello/issues'
 
-EMPTY = (('', ''),)
+EMPTY = (('', '--'),)
 
 
 class TrelloError(Exception):
@@ -59,51 +59,6 @@ class TrelloError(Exception):
 
 class TrelloUnauthorized(TrelloError):
     status_code = 401
-
-
-class TrelloSettingsForm(forms.Form):
-    key = forms.CharField(label=_('Trello API Key'))
-    token = forms.CharField(label=_('Trello API Token'))
-    organization = forms.ChoiceField(
-        label=_('Trello Organization'), choices=(), required=True)
-
-    error_messages = {
-        'invalid_auth': _('Invalid credentials. Please check your key and token and try again.'),
-        'api_failure': _('An unknown error occurred while fetching data from Trello.'),
-    }
-
-    def __init__(self, *args, **kwargs):
-        super(TrelloSettingsForm, self).__init__(*args, **kwargs)
-        initial = kwargs['initial']
-
-        organizations = ()
-
-        if initial.get('key') and initial.get('token'):
-            trello = TrelloClient(initial['key'], initial['token'])
-            try:
-                organizations = EMPTY + trello.organizations_to_options()
-                self.fields['organization'].choices = organizations
-                self.fields['organization'].widget.choices = self.fields['organization'].choices
-            except RequestException:
-                del self.fields['organization']
-        else:
-            del self.fields['organization']
-
-    def clean(self):
-        key = self.cleaned_data.get('key')
-        token = self.cleaned_data.get('token')
-        if key and token:
-            trello = TrelloClient(key, token)
-            try:
-                # simply key validation
-                trello.organizations_to_options()
-            except RequestException as exc:
-                if exc.response and exc.response.status_code == 401:
-                    msg = self.error_messages['invalid_auth']
-                else:
-                    msg = self.error_messages['api_failure']
-                raise forms.ValidationError(msg)
-        return self.cleaned_data
 
 
 class TrelloForm(NewIssueForm):
@@ -146,7 +101,6 @@ class TrelloCard(IssuePlugin):
     conf_key = 'trello'
 
     version = sentry_trello.VERSION
-    project_conf_form = TrelloSettingsForm
     new_issue_form = TrelloForm
     create_issue_template = 'sentry_trello/create_trello_issue.html'
     plugin_misconfigured_template = 'sentry_trello/plugin_misconfigured.html'
@@ -173,6 +127,9 @@ class TrelloCard(IssuePlugin):
             self.get_option(key, project)
             for key in ('key', 'token')
         ))
+
+    def has_project_conf(self):
+        return True
 
     def get_client(self, project):
         return TrelloClient(
@@ -253,3 +210,43 @@ class TrelloCard(IssuePlugin):
                 _('Error adding Trello card: %s') % str(e))
 
         return '%s/%s' % (card['id'], card['url'])
+
+    def get_config(self, project, **kwargs):
+        key_value = self.get_option('key', project)
+        key = {
+            'name': 'key',
+            'label': _('Trello API Key'),
+            'type': 'text',
+            'required': True,
+            'default': key_value,
+        }
+        token = {
+            'name': 'token',
+            'label': _('Trello API Token'),
+            'type': 'secret',
+            'required': True,
+        }
+        token_value = self.get_option('token', project)
+        if token_value:
+            token['has_saved_value'] = True
+            token['prefix'] = token_value[:6]
+            token['required'] = False
+
+        config = [key, token]
+
+        if key_value and token_value:
+            trello = self.get_client(project)
+            organizations = trello.organizations_to_options()
+            organization_value = self.get_option('organization', project)
+            if not organization_value:
+                organizations = EMPTY + organizations
+            config.append({
+                'name': 'organization',
+                'label': _('Trello Organization'),
+                'type': 'select',
+                'choices': organizations,
+                'default': organization_value,
+                'required': True,
+            })
+
+        return config
