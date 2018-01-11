@@ -36,9 +36,9 @@ from sentry.utils.http import absolute_uri
 
 from .client import TrelloClient
 
-SETUP_URL = 'https://github.com/damianzaremba/sentry-trello/blob/master/HOW_TO_SETUP.md'  # NOQA
+SETUP_URL = 'https://github.com/getsentry/sentry-trello/blob/master/HOW_TO_SETUP.md'  # NOQA
 
-ISSUES_URL = 'https://github.com/damianzaremba/sentry-trello/issues'
+ISSUES_URL = 'https://github.com/getsentry/sentry-trello/issues'
 
 EMPTY = (('', ''),)
 
@@ -129,7 +129,7 @@ class TrelloForm(NewIssueForm):
 
 class TrelloCard(IssuePlugin):
     author = 'Damian Zaremba'
-    author_url = 'http://damianzaremba.co.uk'
+    author_url = 'https://sentry.io'
     title = _('Trello')
     description = _('Create Trello cards on exceptions.')
     slug = 'trello'
@@ -139,7 +139,7 @@ class TrelloCard(IssuePlugin):
             SETUP_URL),
         (_('Bug Tracker'),
             ISSUES_URL),
-        (_('Source'), 'https://github.com/damianzaremba/sentry-trello'),
+        (_('Source'), 'https://github.com/getsentry/sentry-trello'),
     ]
 
     conf_title = title
