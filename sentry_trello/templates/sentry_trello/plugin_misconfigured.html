@@ -9,5 +9,5 @@
             <li>An unknown error occurred while communicating with Trello.</li>
         {% endif %}
     </ul>
-    <p>You may wish to double check your <a href="{% url 'sentry-configure-project-plugin' project.organization.slug project.slug plugin.slug %}">configuration</a>.</p>
+    <p>You may wish to double check your <a href="{% absolute_uri '/{}/{}/settings/plugins/{}/' project.organization.slug project.slug plugin.slug %}">configuration</a>.</p>
 {% endblock %}
