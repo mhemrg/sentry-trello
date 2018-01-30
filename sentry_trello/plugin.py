@@ -32,6 +32,7 @@ from django.utils.translation import ugettext_lazy as _
 from requests.exceptions import RequestException
 from sentry.plugins.base import JSONResponse
 from sentry.plugins.bases.issue import IssuePlugin, NewIssueForm
+from sentry.exceptions import PluginError
 from sentry.utils.http import absolute_uri
 
 from .client import TrelloClient
@@ -97,6 +98,11 @@ class TrelloCard(IssuePlugin):
         (_('Source'), 'https://github.com/getsentry/sentry-trello'),
     ]
 
+    error_messages = {
+        'invalid_auth': _('Invalid credentials. Please check your key and token and try again.'),
+        'api_failure': _('An unknown error occurred while fetching data from Trello.'),
+    }
+
     conf_title = title
     conf_key = 'trello'
 
@@ -105,6 +111,10 @@ class TrelloCard(IssuePlugin):
     create_issue_template = 'sentry_trello/create_trello_issue.html'
     plugin_misconfigured_template = 'sentry_trello/plugin_misconfigured.html'
 
+    def __init__(self):
+        super(TrelloCard, self).__init__()
+        self.client_errors = []
+        
     def _get_group_description(self, request, group, event):
         """
         Return group description in markdown-compatible format.
@@ -212,6 +222,7 @@ class TrelloCard(IssuePlugin):
         return '%s/%s' % (card['id'], card['url'])
 
     def get_config(self, project, **kwargs):
+        self.client_errors = []
         key_value = self.get_option('key', project)
         key = {
             'name': 'key',
@@ -236,17 +247,31 @@ class TrelloCard(IssuePlugin):
 
         if key_value and token_value:
             trello = self.get_client(project)
-            organizations = trello.organizations_to_options()
-            organization_value = self.get_option('organization', project)
-            if not organization_value:
-                organizations = EMPTY + organizations
-            config.append({
-                'name': 'organization',
-                'label': _('Trello Organization'),
-                'type': 'select',
-                'choices': organizations,
-                'default': organization_value,
-                'required': True,
-            })
+            organizations = tuple()
+            try:
+                organizations = trello.organizations_to_options()
+                organization_value = self.get_option('organization', project)
+                if not organization_value:
+                    organizations = EMPTY + organizations
+                config.append({
+                    'name': 'organization',
+                    'label': _('Trello Organization'),
+                    'type': 'select',
+                    'choices': organizations,
+                    'default': organization_value,
+                    'required': True,
+                })
+            except RequestException as exc:
+                if exc.response is not None and exc.response.status_code == 401:
+                    self.client_errors.append(self.error_messages['invalid_auth'])
+                else:
+                    self.client_errors.append(self.error_messages['api_failure'])
+        return config
 
+    def validate_config(self, project, config, actor):
+        super(TrelloCard, self).validate_config(project, config, actor)
+        errors = self.client_errors
+        if errors:
+            self.reset_options(project=project)
+            raise PluginError(errors[0])
         return config
