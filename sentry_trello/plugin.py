@@ -114,6 +114,7 @@ class TrelloCard(IssuePlugin):
     def __init__(self):
         super(TrelloCard, self).__init__()
         self.client_errors = []
+        self.additial_fields = []
         
     def _get_group_description(self, request, group, event):
         """
@@ -222,8 +223,12 @@ class TrelloCard(IssuePlugin):
         return '%s/%s' % (card['id'], card['url'])
 
     def get_config(self, project, **kwargs):
-        self.client_errors = []
-        key_value = self.get_option('key', project)
+        def get_from_initial(initial, field):
+            return initial.get(field) or self.get_option(field, project)
+
+        initial = kwargs.get('initial') or {}
+        key_value = get_from_initial(initial, 'key')
+
         key = {
             'name': 'key',
             'label': _('Trello API Key'),
@@ -237,7 +242,8 @@ class TrelloCard(IssuePlugin):
             'type': 'secret',
             'required': True,
         }
-        token_value = self.get_option('token', project)
+        token_value = get_from_initial(initial, 'token')
+       
         if token_value:
             token['has_saved_value'] = True
             token['prefix'] = token_value[:6]
@@ -246,21 +252,22 @@ class TrelloCard(IssuePlugin):
         config = [key, token]
 
         if key_value and token_value:
-            trello = self.get_client(project)
+            trello = TrelloClient(key_value, token_value)
             organizations = tuple()
             try:
                 organizations = trello.organizations_to_options()
                 organization_value = self.get_option('organization', project)
                 if not organization_value:
                     organizations = EMPTY + organizations
-                config.append({
-                    'name': 'organization',
-                    'label': _('Trello Organization'),
-                    'type': 'select',
-                    'choices': organizations,
-                    'default': organization_value,
-                    'required': True,
-                })
+                if get_from_initial(initial, 'organization') or kwargs.get('add_additial_fields'):
+                    config.append({
+                        'name': 'organization',
+                        'label': _('Trello Organization'),
+                        'type': 'select',
+                        'choices': organizations,
+                        'default': organization_value,
+                        'required': True,
+                    })
             except RequestException as exc:
                 if exc.response is not None and exc.response.status_code == 401:
                     self.client_errors.append(self.error_messages['invalid_auth'])
@@ -273,5 +280,7 @@ class TrelloCard(IssuePlugin):
         errors = self.client_errors
         if errors:
             self.reset_options(project=project)
+            self.client_errors = []
             raise PluginError(errors[0])
+            
         return config
