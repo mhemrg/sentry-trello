@@ -243,36 +243,42 @@ class TrelloCard(IssuePlugin):
             'required': True,
         }
         token_value = get_from_initial(initial, 'token')
-       
+        organization = {
+            'name': 'organization',
+            'label': _('Trello Organization'),
+            'type': 'select',
+            'choices': None,
+            'default': None,
+            'required': True,
+            'readonly':True,
+            'disabledReason':'Enter your API token and key above, and click submit.',
+        }
+
         if token_value:
             token['has_saved_value'] = True
             token['prefix'] = token_value[:6]
             token['required'] = False
 
-        config = [key, token]
+        config = [key, token, organization]
 
         if key_value and token_value:
             trello = TrelloClient(key_value, token_value)
             organizations = tuple()
             try:
                 organizations = trello.organizations_to_options()
-                organization_value = self.get_option('organization', project)
-                if not organization_value:
-                    organizations = EMPTY + organizations
-                if get_from_initial(initial, 'organization') or kwargs.get('add_additial_fields'):
-                    config.append({
-                        'name': 'organization',
-                        'label': _('Trello Organization'),
-                        'type': 'select',
-                        'choices': organizations,
-                        'default': organization_value,
-                        'required': True,
-                    })
             except RequestException as exc:
                 if exc.response is not None and exc.response.status_code == 401:
                     self.client_errors.append(self.error_messages['invalid_auth'])
                 else:
                     self.client_errors.append(self.error_messages['api_failure'])
+            else:
+                organization_value = get_from_initial(initial, 'organization')
+                if not organization_value:
+                    organizations = EMPTY + organizations
+                if organization_value or kwargs.get('add_additial_fields'):
+                    organization['choices'] = organizations
+                    organization['default'] = organization_value
+                    organization['readonly'] = False
         return config
 
     def validate_config(self, project, config, actor):
