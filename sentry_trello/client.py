@@ -56,7 +56,7 @@ class TrelloClient(object):
             },
         )
 
-    def new_card(self, name, idList, desc=None, pos):
+    def new_card(self, name, idList, desc=None, pos=None):
         return self._request(
             path='/cards',
             method='POST',
