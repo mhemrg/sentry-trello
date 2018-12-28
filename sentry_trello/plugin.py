@@ -215,7 +215,7 @@ class TrelloCard(IssuePlugin):
                 name=form_data['title'],
                 desc=form_data['description'],
                 idList=form_data['trello_list'],
-                pos='bottom',
+                pos='top',
             )
             
             trello._request(
