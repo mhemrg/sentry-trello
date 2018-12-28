@@ -216,6 +216,15 @@ class TrelloCard(IssuePlugin):
                 desc=form_data['description'],
                 idList=form_data['trello_list'],
             )
+            
+            trello._request(
+                path='/cards/' + card['id'] + '/idLabels',
+                method='POST',
+                data={
+                    'value': '5c26950ec6a60131c2fa440d', # Exception label
+                },
+            )
+            
         except RequestException as e:
             raise forms.ValidationError(
                 _('Error adding Trello card: %s') % str(e))
